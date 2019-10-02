@@ -1,5 +1,5 @@
 # Kubernetes - WordPress and MySQL with Persistent Volumes
-This is developed based on the origional tutorial:
+based on the origional tutorial from kubernetes.io
 
 https://kubernetes.io/docs/tutorials/stateful-application/mysql-wordpress-persistent-volume/
 
