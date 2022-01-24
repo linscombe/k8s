@@ -1,0 +1,189 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bookstack
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bookstack
+  namespace: bookstack
+  labels:
+    app: bookstack
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bookstack
+      tier: frontend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 33%
+  template:
+    metadata:
+      labels:
+        app: bookstack
+        tier: frontend
+    spec:
+      containers:
+      - name: bookstack
+        image: linuxserver/bookstack:latest
+        env:
+        - name: APP_ENV
+          value: "production"
+        - name: APP_URL
+          value: "https://bookstack.local"
+        - name: DB_HOST
+          value: "bookstack-db"
+        - name: DB_USER
+          value: "bookstack"
+        - name: DB_PASS
+          value: "password"
+        - name: DB_DATABASE
+          value: "bookstackapp"
+        ports:
+        - name: web
+          containerPort: 80
+        volumeMounts:
+        - name: bookstack-app-persistent-storage
+          mountPath: /config
+      volumes:
+      - name: bookstack-app-persistent-storage
+        persistentVolumeClaim:
+          claimName: bookstack-app-pv-claim
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  namespace: bookstack
+  name: bookstack-app-pv-claim
+  labels:
+    app: bookstack
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: bookstack-app
+  namespace: bookstack
+spec:
+  ports:
+    - protocol: TCP
+      name: web
+      port: 80
+  selector:
+    app: bookstack
+    tier: frontend
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  namespace: bookstack
+  name: ingress
+  annotations:
+    kubernetes.io/ingress.class: "traefik"
+spec:
+  rules:
+  - host: bookstack.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: bookstack-app
+            port:
+              number: 80
+  tls:
+  - secretName: tlscrt
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tlscrt
+  namespace: bookstack
+data:
+  tls.crt: [base64 encode]
+  tls.key: [base64 encode]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: bookstack
+  name: bookstack-db
+  labels:
+    app: bookstack
+spec:
+  ports:
+    - port: 3306
+  selector:
+    app: bookstack
+    tier: mysql
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: bookstack
+  name: mysql
+  labels:
+    app: bookstack
+spec:
+  selector:
+    matchLabels:
+      app: bookstack
+      tier: mysql
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: bookstack
+        tier: mysql
+    spec:
+      containers:
+      - image: linuxserver/mariadb
+        name: mysql
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          value: "password"
+        - name: TZ
+          value: "Europe/London"
+        - name: MYSQL_DATABASE
+          value: "bookstackapp"
+        - name: MYSQL_USER
+          value: "bookstack"
+        - name: MYSQL_PASSWORD
+          value: "password"
+        ports:
+        - containerPort: 3306
+          name: mysql
+        volumeMounts:
+        - name: bookstack-mysql-persistent-storage
+          mountPath: /config
+      volumes:
+      - name: bookstack-mysql-persistent-storage
+        persistentVolumeClaim:
+          claimName: bookstack-mysql-pv-claim
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  namespace: bookstack
+  name: bookstack-mysql-pv-claim
+  labels:
+    app: bookstack
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi
