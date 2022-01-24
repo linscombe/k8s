@@ -1,0 +1,105 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: minio1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: minio1
+  name: minio
+  labels:
+    app: minio
+spec:
+  selector:
+    matchLabels:
+      app: minio
+      tier: frontend
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: minio
+        tier: frontend
+    spec:
+      containers:
+      - image: minio/minio
+        name: minio
+        args: ['server', '/data']
+        env:
+        - name: MINIO_ACCESS_KEY
+          value: [key]
+        - name: MINIO_SECRET_KEY
+          value: [secret]
+        - name: MINIO_REGION_NAME
+          value: us
+        ports:
+        - containerPort: 9000
+          name: minio
+        volumeMounts:
+        - name: minio-persistent-storage
+          mountPath: /data
+      volumes:
+      - name: minio-persistent-storage
+        persistentVolumeClaim:
+          claimName: minio-pv-claim
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  namespace: minio1
+  name: minio-pv-claim
+  labels:
+    app: minio
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: minio1
+  name: minio
+  labels:
+    app: minio
+spec:
+  ports:
+    - port: 9000
+  selector:
+    app: minio
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: minio-ingress
+  namespace: minio1
+  annotations:
+    kubernetes.io/ingress.class: "traefik"
+spec:
+  rules:
+  - host: minio1.localhost
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: minio
+            port:
+              number: 9000
+  tls:
+  - secretName: tlscrt
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tlscrt
+  namespace: minio1
+data:
+  tls.crt: [base64 encode]
+  tls.key: [base64 encode]
